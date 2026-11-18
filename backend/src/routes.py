@@ -5,7 +5,7 @@ from .models import *
 from .schemas import *
 from .security import current,allow
 from .common import *
-from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory
+from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory,verification_service as verification
 router=APIRouter()
 def change(u,action,fn,supervisor=False):
  allow(u,*(['supervisor'] if supervisor else ['operator','supervisor']))
@@ -13,7 +13,7 @@ def change(u,action,fn,supervisor=False):
   x=fn(s);log(s,u,action,dump(x));s.commit();return dump(x)
 @router.get('/register')
 def register(u=Depends(current)):
- with Session() as s:return {name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('clock',Registry)]}
+ with Session() as s:return {name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('releases',Release),('clock',Registry)]}
 @router.get('/audit')
 def audit(u=Depends(current)):
  with Session() as s:return [dump(x) for x in rows(s,Audit)]
@@ -36,6 +36,11 @@ def matching(u=Depends(current)):
  return d
 @router.post('/proposals')
 def pcreate(d:ProposalIn,u=Depends(current)):return change(u,'归并提案',lambda s:proposal.create(s,d.model_dump()))
+@router.get('/proposals/{id}/verification')
+def pverify(id:int,u=Depends(current)):
+ with Session() as s:return verification.verify(s,get(s,Proposal,id))
+@router.post('/proposals/{id}/release')
+def prelease(id:int,d:ReleaseIn,u=Depends(current)):return change(u,'放行挂起提案',lambda s:verification.release(s,id,d.model_dump(),u),True)
 @router.post('/objections')
 def ocreate(d:ObjectionIn,u=Depends(current)):return change(u,'登记异议',lambda s:proposal.object_to(s,d.model_dump()))
 @router.post('/objections/{id}/resolve')

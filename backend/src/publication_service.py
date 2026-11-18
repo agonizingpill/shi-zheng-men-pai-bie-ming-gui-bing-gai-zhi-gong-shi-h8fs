@@ -3,10 +3,14 @@ from .models import Proposal,Notice,Objection,Alias,Evidence
 from .common import *
 from .proposal_service import pair
 from .directory_service import activate
+from . import verification_service as verification
 def publish(s,d):
  r=lock(s);p=get(s,Proposal,d['proposal_id'])
  if p.state!='draft':fail('只可公示草稿提案')
  pair(s,p.source_id,p.target_id)
+ if not verification.fresh(s,r):fail('匹配结果已过期或尚未计算，补录后需重新运行匹配再公示')
+ v=verification.verify(s,p)
+ if v['verdict']!='clear' and not (v['release'] and v['release']['valid']):fail('提案已挂起：'+'；'.join(v['reasons'])+'。需核定员凭补录的独立书证放行')
  aliases={x.id for x in rows(s,Alias) if x.entrance_id==p.source_id}
  if not any(x.alias_id in aliases for x in rows(s,Evidence)):fail('来源入口缺少别名证据，不可公示')
  start=timestamp(r.now);n=Notice(proposal_id=p.id,starts=start.isoformat(),ends=(start+timedelta(days=d['days'])).isoformat());s.add(n);p.state='public';s.flush();return n

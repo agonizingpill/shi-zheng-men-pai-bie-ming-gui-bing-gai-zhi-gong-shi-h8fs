@@ -13,31 +13,33 @@ docker compose up -d --build --wait
 
 | 角色 | 页面与权限 | 典型动作 |
 |---|---|---|
-| operator | 六页可读，入口/别名/证据/候选/提案/异议可写 | 现场采集旧门牌与提出归并 |
-| supervisor | 全部日常动作及复核、公示、生效、回滚、演示时钟 | 签核异议和更新服务目录 |
-| viewer | 六页只读，后端所有写接口拒绝 | 查看公示期限及旧址路径 |
+| operator | 七页可读，入口/别名/证据/候选/提案/异议可写 | 现场采集旧门牌与提出归并 |
+| supervisor | 全部日常动作及放行、复核、公示、生效、回滚、演示时钟 | 签核异议和更新服务目录 |
+| viewer | 七页只读，后端所有写接口拒绝 | 查看公示期限及旧址路径 |
 
 `.env.example` 包含 COMPOSE_PROJECT_NAME、FRONTEND_PORT、BACKEND_PORT、DB_PORT、DOCKER_SUBNET、JWT_SECRET，生产部署应更换演示凭据。卷保存MySQL、Redis和worker心跳。中文和空格路径已实测。
 
-## 六个模块与状态
+## 七个模块与状态
 
 1. 实地门牌：Entrance记录唯一采集号、街道、门牌数字与经纬度，坐标更正留审计；不因文字近似删除独立入口。
-2. 别名书证：Alias归属入口，Evidence有唯一文件/照片参考号和现场核验说明；来源无证据禁止公示。
-3. 候选归并：真实worker字符TF-IDF与层次聚类给出候选、相似度和数字冲突；Proposal独立记录来源目标和人工理由。同街同号才可形成提案。
-4. 住户异议：Objection open→resolved，核定维持归并或split拆分；拆分把提案置rejected、公示withdrawn，仍保留两个入口。
-5. 改址公示：Proposal draft→public→active，Notice至少3天；期限未满、异议未结、来源已有有效映射、映射成环均拒绝生效。
-6. 服务目录：Redirect保存source→target及原提案，逐跳解析canonical。回滚置rolled_back并保留原因、公示和原目标；不是删除历史。所有图写操作先锁Registry父资源，防止并发生效绕过单来源约束或无环检查。
+2. 别名书证：Alias归属入口，Evidence有唯一文件/照片参考号和现场核验说明；来源无证据禁止公示。补录别名或书证使Registry数据版本+1。
+3. 候选归并：真实worker字符TF-IDF与层次聚类给出候选、相似度和数字冲突；Proposal独立记录来源目标和人工理由。同街同号才可形成提案。匹配结果带数据版本戳，补录后迟出的旧结果不能用来发公示。
+4. 归并核验：同街同号组内以来源有佐证的别名对目标别名排首选（最大余弦≥0.2且唯一）；逐份撤去书证、排除失去佐证的别名后重排。首选消失、换了入口或并列时提案挂起、禁止公示；核定员凭组内独立书证放行（采集员放行被403拦住），再补录别名或书证则旧放行作废。页面可查原首选、撤去哪份书证后首选变了及变成什么。
+5. 住户异议：Objection open→resolved，核定维持归并或split拆分；拆分把提案置rejected、公示withdrawn，仍保留两个入口。
+6. 改址公示：Proposal draft→public→active，Notice至少3天；期限未满、异议未结、来源已有有效映射、映射成环、匹配结果过期、提案挂起未放行均拒绝生效或公示。
+7. 服务目录：Redirect保存source→target及原提案，逐跳解析canonical。回滚置rolled_back并保留原因、公示和原目标；不是删除历史。所有图写操作先锁Registry父资源，防止并发生效绕过单来源约束或无环检查。
 
 ## 一天的剧本
 
 1. 2026-11-18 09:00采集员核对CQ-018-A正门坐标与CQ-018-B旧“十八号”照片。
 2. 在别名页核对照片-CQ-018-B，补录旧称和地籍图说明。
 3. 运行别名匹配，比较十八号/18号，81号显示数字冲突，后端同样禁止归并。
-4. 查看P031归并提案，登记Y031住户关于南入口的异议。
-5. 核定员发布3天公示；当日生效按钮返回“公示期限未满”。
-6. 使用明确的演示时钟推进到11月21日09:00；未处理Y031仍无法生效。
-7. 核定员现场核验后维持归并，公示生效，CQ-018-B解析到CQ-018-A。
-8. 发现入口独立则回滚映射，旧入口恢复自身canonical，原映射及原因仍可查；异议split可在生效前直接撤提案。
+4. 打开归并核验页：P031首选CQ-018-A且逐份撤证后不变，可公示；P032撤去照片-CQ-018-C后首选消失，已挂起。
+5. 查看P031归并提案，登记Y031住户关于南入口的异议。
+6. 核定员发布3天公示；当日生效按钮返回“公示期限未满”。挂起的P032须核定员凭补录的独立书证放行后才可公示，采集员点放行被403拦住。
+7. 使用明确的演示时钟推进到11月21日09:00；未处理Y031仍无法生效。
+8. 核定员现场核验后维持归并，公示生效，CQ-018-B解析到CQ-018-A。
+9. 发现入口独立则回滚映射，旧入口恢复自身canonical，原映射及原因仍可查；异议split可在生效前直接撤提案。补录别名或书证后旧放行作废、匹配结果过期，需重新计算与放行。
 
 演示时钟保存在Registry，仅核定员可单向推进并留审计，不会依赖机器日期令种子失效。
 
@@ -49,9 +51,9 @@ docker compose up -d --build --wait
 
 ## 代码与开发
 
-Python FastAPI / SQLAlchemy / MySQL8 / Redis7 / scikit-learn；原生HTML/CSS/JS ES modules + Nginx。backend/src/models.py为独立关系模型，schemas.py严格类型与长度范围；entrance_service、proposal_service、publication_service、directory_service分别承担现场、异议、期限、无环图规则。routes.py做JWT角色入口；worker.py运行真实计算；common.py管Registry锁与审计。middlewares.py含RequestTrace/Recovery两中间件。
+Python FastAPI / SQLAlchemy / MySQL8 / Redis7 / scikit-learn；原生HTML/CSS/JS ES modules + Nginx。backend/src/models.py为独立关系模型，schemas.py严格类型与长度范围；entrance_service、proposal_service、verification_service、publication_service、directory_service分别承担现场、异议、首选核验、期限、无环图规则。routes.py做JWT角色入口；worker.py运行真实计算并给结果打上数据版本戳；common.py管Registry锁与审计。middlewares.py含RequestTrace/Recovery两中间件。
 
-frontend/src/pages下六页与业务模块对应；components/registry.js共享门牌牌面、状态徽标、标题和表单；utils/api.js管理会话与聚合store，utils/format.js管转义与数据类型。角色和状态枚举分别在backend/src/constants.py、frontend/src/constants.js（模型中持久化值同义）。
+frontend/src/pages下七页与业务模块对应；components/registry.js共享门牌牌面、状态徽标、标题和表单；utils/api.js管理会话与聚合store，utils/format.js管转义与数据类型。角色和状态枚举分别在backend/src/constants.py、frontend/src/constants.js（模型中持久化值同义）。
 
 ```bash
 docker compose exec -T backend python scripts/seed_demo.py
@@ -64,6 +66,6 @@ seed自然键仅补缺，已有坐标、提案、公示、映射和用户编辑�
 
 ## 已知边界
 
-单街道模拟，不验证真实地籍权属；门牌中文数字规范仅支持1–99常见写法，不是全国地址标准化引擎。证据是文本文件参考号，不上传照片文件；未提供居民实名认证和外部目录推送。全图Registry锁优先小规模正确性，吞吐有限。BLPOP是轻量队列，进程在弹出后被杀不会自动重投；可新建匹配任务。时间按演示本地无时区ISO工作时钟处理；create_all不含生产迁移。
+单街道模拟，不验证真实地籍权属；门牌中文数字规范仅支持1–99常见写法，不是全国地址标准化引擎。证据是文本文件参考号，不上传照片文件；未提供居民实名认证和外部目录推送。首选核验只覆盖提案同街同号组内的书证，撤证重排为确定性重算而非历史快照。全图Registry锁优先小规模正确性，吞吐有限。BLPOP是轻量队列，进程在弹出后被杀不会自动重投；可新建匹配任务。时间按演示本地无时区ISO工作时钟处理；create_all不含生产迁移，新增列由seed幂等补齐。
 
 License: MIT（本项目新增代码）。

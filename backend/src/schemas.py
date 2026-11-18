@@ -22,5 +22,7 @@ class NoticeIn(Input):
  proposal_id:int;days:int=Field(ge=3,le=30)
 class ReasonIn(Input):
  reason:str=Field(min_length=8,max_length=500)
+class ReleaseIn(Input):
+ evidence_id:int;note:str=Field(min_length=8,max_length=500)
 class ClockIn(Input):
  now:str;reason:str=Field(min_length=8,max_length=500)

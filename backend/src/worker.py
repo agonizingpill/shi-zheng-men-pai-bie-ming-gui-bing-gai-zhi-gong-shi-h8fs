@@ -10,10 +10,10 @@ while True:
  item=q.blpop('address:matching',timeout=2)
  if not item:continue
  with Session() as s:
-  lock(s);run=s.get(MatchRun,int(item[1]))
+  r=lock(s);run=s.get(MatchRun,int(item[1]))
   if not run or run.state!='queued':continue
   try:
-   result=match([dump(x) for x in rows(s,Entrance)],[dump(x) for x in rows(s,Alias)]);run.result=result
+   result=match([dump(x) for x in rows(s,Entrance)],[dump(x) for x in rows(s,Alias)]);run.result=result;run.data_version=r.data_version
    for d in result['candidates']:s.add(Candidate(run_id=run.id,**d))
    run.state='ready'
   except Exception as e:run.state='failed';run.error=str(e)[:500];logging.exception('matching failed')
